@@ -1,47 +1,36 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# ====== CHOOSE YOUR PANEL MODEL ======
-# Common small SPI TFT HATs:
-#   - 'ili9341'  (many 2.4"/2.8"/3.2" hats)
-#   - 'st7789'   (many 2.0"/2.4" round/rect hats)
-MODEL="ili9341"
-# =====================================
+# Inland 3.5" TFT HAT (Micro Center SKU 221879) – Waveshare 3.5" (A) compatible
+# Panel: ILI9486 (480x320), Touch: ADS7846/XPT2046 compatible
+# This enables SPI and adds the fbdev overlay that exposes /dev/fb1.
 
-CONFIG="/boot/firmware/config.txt"   # Bookworm path; older images may use /boot/config.txt
+CONFIG="/boot/firmware/config.txt"   # Bookworm path; use /boot/config.txt on older images
+if [[ ! -f "${CONFIG}" ]]; then
+  CONFIG="/boot/config.txt"
+fi
+
 MARK_START="# >>> frisbee-tft BEGIN >>>"
 MARK_END="# <<< frisbee-tft END <<<"
 
-# Reasonable defaults (SPI0, standard pins). Adjust if your HAT requires non-default pins.
-case "${MODEL}" in
-  ili9341)
-    # Uses fbtft driver via overlay
-    OVERLAY_BLOCK=$(cat <<'EOF'
-dtoverlay=spi1-1cs
-dtoverlay=fb_ili9341,spi=1,speed=64000000,rotate=90,fps=60
-# Backlight (if your HAT exposes one; harmless if not present)
+OVERLAY_BLOCK=$(cat <<'EOF'
+# Enable SPI (required by most 3.5" GPIO TFT hats)
+dtparam=spi=on
+
+# Waveshare 3.5" (A) compatible framebuffer overlay (creates /dev/fb1)
+# rotate: 0/90/180/270 as needed; speed/fps are safe defaults
+dtoverlay=waveshare35a,rotate=90,speed=64000000,fps=60
+
+# Resistive touch controller (ADS7846/XPT2046) – optional; harmless if absent
+dtoverlay=ads7846,cs=1,penirq=25,penirq_pull=2,speed=50000
+
+# Backlight control (some boards expose it; harmless if absent)
 dtoverlay=gpio-backlight
 EOF
 )
-    ;;
-  st7789)
-    OVERLAY_BLOCK=$(cat <<'EOF'
-dtoverlay=spi1-1cs
-dtoverlay=vc4-kms-dpi-panel
-# Many ST7789 hats expose KMS panel drivers differently; fbdev may map to fb0.
-# If your vendor provides a specific overlay like fb_st7789v, prefer that:
-# dtoverlay=fb_st7789v,spi=1,speed=64000000,rotate=90
-EOF
-)
-    ;;
-  *)
-    echo "Unknown MODEL='${MODEL}'. Use 'ili9341' or 'st7789'." >&2
-    exit 2
-    ;;
-esac
 
 if [[ ! -f "${CONFIG}" ]]; then
-  echo "Cannot find ${CONFIG}. Adjust the path for your OS version." >&2
+  echo "Cannot find ${CONFIG}. Aborting." >&2
   exit 1
 fi
 
@@ -55,18 +44,18 @@ sudo awk -v start="${MARK_START}" -v end="${MARK_END}" '
 {
   echo "${MARK_START}"
   echo "# Enabled by scripts/enable_tft_overlay.sh on $(date -Iseconds)"
-  echo "# MODEL=${MODEL}"
   echo "${OVERLAY_BLOCK}"
   echo "${MARK_END}"
 } | sudo tee -a "${CONFIG}.tmp" >/dev/null
 
 sudo mv "${CONFIG}.tmp" "${CONFIG}"
 
-echo "[tft] Updated ${CONFIG} with ${MODEL} overlays."
-echo "[tft] Enabling kernel modules…"
-# These will autoload on reboot; modprobe now for this session if available
+# Load modules now (they will auto-load on reboot too)
 sudo modprobe spi_bcm2835 || true
-sudo modprobe fbtft || true 2>/dev/null || true
+sudo modprobe fbtft_device 2>/dev/null || true
+sudo modprobe fbtft 2>/dev/null || true
+sudo modprobe ads7846 2>/dev/null || true
 
+echo "[tft] Overlay configured in ${CONFIG}."
 echo "[tft] Reboot required to create /dev/fb1 consistently."
 echo "      Run: sudo reboot"
