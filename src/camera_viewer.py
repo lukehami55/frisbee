@@ -4,7 +4,7 @@ Simple full-screen viewer for a USB UVC endoscope.
 - Exit: press 'q' or double-tap the touch screen quickly.
 """
 from __future__ import annotations
-import argparse, time
+import argparse, sys, time
 import cv2, pygame
 from .device_match import pick_best_device
 from .tft_env import configure_sdl_env
@@ -49,8 +49,16 @@ def main():
     configure_sdl_env()
     args = parse_args()
 
+    print(
+        f"[viewer] Starting with rotate={args.rotate}, mirror={args.mirror}, "
+        f"target={args.width}x{args.height}@{args.fps}",
+        file=sys.stderr,
+    )
+
     dev = pick_best_device(args.device)
+    print(f"[viewer] Opening camera device {dev}", file=sys.stderr)
     cap = open_cam(dev, args.width, args.height, args.fps)
+    print("[viewer] Camera opened successfully", file=sys.stderr)
 
     pygame.init()
     screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
