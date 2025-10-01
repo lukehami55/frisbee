@@ -7,7 +7,7 @@ Type=simple
 User=__USER__
 WorkingDirectory=__WORKDIR__
 Environment=PYTHONUNBUFFERED=1
-ExecStart=__WORKDIR__/.venv/bin/python -m src.camera_viewer --rotate 90
+ExecStart=__WORKDIR__/scripts/run_service.sh --rotate 90
 Restart=always
 RestartSec=1
 
