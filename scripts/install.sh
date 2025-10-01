@@ -1,46 +1,41 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SERVICE_NAME="endoscope-viewer.service"
-SERVICE_SRC="${REPO_DIR}/systemd/${SERVICE_NAME}"
-SERVICE_DST="/etc/systemd/system/${SERVICE_NAME}"
-TARGET_USER="${SUDO_USER:-${USER}}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
-echo "==> Packages..."
-sudo apt-get update -y
-sudo apt-get install -y python3 python3-venv python3-pip v4l-utils \
-  libsdl2-dev libsdl2-ttf-2.0-0
+UNIT_TEMPLATE="${ROOT_DIR}/systemd/endoscope-viewer.service"
+UNIT_DST="/etc/systemd/system/endoscope-viewer.service"
 
-echo "==> Python venv..."
-python3 -m venv "${REPO_DIR}/.venv"
-source "${REPO_DIR}/.venv/bin/activate"
+if [[ ! -f "${UNIT_TEMPLATE}" ]]; then
+  echo "Missing ${UNIT_TEMPLATE}" >&2
+  exit 1
+fi
+
+# Inject absolute repo path into the unit file
+TMP_UNIT="$(mktemp)"
+sed "s|__WORKDIR__|${ROOT_DIR}|g" "${UNIT_TEMPLATE}" > "${TMP_UNIT}"
+sudo mv "${TMP_UNIT}" "${UNIT_DST}"
+sudo chown root:root "${UNIT_DST}"
+sudo chmod 644 "${UNIT_DST}"
+
+# Create/refresh venv (optional but recommended)
+if ! [[ -x "${ROOT_DIR}/.venv/bin/python" ]]; then
+  echo "[install] Creating venv…"
+  python3 -m venv "${ROOT_DIR}/.venv"
+fi
+source "${ROOT_DIR}/.venv/bin/activate"
 pip install --upgrade pip
-pip install -r "${REPO_DIR}/requirements.txt"
+pip install -r "${ROOT_DIR}/requirements.txt"
 
-echo "==> Add ${TARGET_USER} to 'video' group (access /dev/video*)"
-sudo usermod -aG video "${TARGET_USER}" || true
-
-# ---- OPTIONAL: enable a common Waveshare 3.5\" TFT overlay (if your TFT isn't set up) ----
-# CONFIG_TXT="/boot/firmware/config.txt"
-# [ -f "$CONFIG_TXT" ] || CONFIG_TXT="/boot/config.txt"
-# sudo sed -i 's/^\s*#\?\s*dtparam=spi=.*/dtparam=spi=on/' "$CONFIG_TXT" || true
-# if ! grep -q "^dtoverlay=waveshare35a" "$CONFIG_TXT"; then
-#   sudo tee -a "$CONFIG_TXT" >/dev/null <<'EOF'
-# dtoverlay=waveshare35a,rotate=90,speed=64000000,fps=60
-# disable_overscan=1
-# EOF
-#   echo "TFT overlay lines added. Reboot after install if you enabled this."
-# fi
-# -----------------------------------------------------------------------------------------
-
-echo "==> Install systemd service..."
-TMP="$(mktemp)"
-sed "s|__WORKDIR__|${REPO_DIR}|g; s|__USER__|${TARGET_USER}|g" "${SERVICE_SRC}" > "${TMP}"
-sudo mv "${TMP}" "${SERVICE_DST}"
-sudo chmod 644 "${SERVICE_DST}"
+# Reload + enable + start
 sudo systemctl daemon-reload
-sudo systemctl enable "${SERVICE_NAME}"
-sudo systemctl restart "${SERVICE_NAME}"
+sudo systemctl enable endoscope-viewer.service
+sudo systemctl restart endoscope-viewer.service
 
-echo "Done. Logs: sudo journalctl -u ${SERVICE_NAME} -f"
+echo
+echo "[install] Done. Current unit:"
+sudo systemctl cat endoscope-viewer.service
+echo
+echo "[install] Tail logs with:"
+echo "  sudo journalctl -u endoscope-viewer.service -f"
