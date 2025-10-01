@@ -5,6 +5,6 @@ If `/dev/fb1` isn’t present, it renders to the default display (HDMI).
 
 ## Install (on the Pi)
 ```bash
-git clone https://github.com/<your-username>/pi-endoscope-tft.git
-cd pi-endoscope-tft
+git clone https://github.com/lukehami55/frisbee.git
+cd frisbee
 sudo ./scripts/install.sh
