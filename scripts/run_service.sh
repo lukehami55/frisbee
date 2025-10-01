@@ -27,9 +27,11 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
 # Hint SDL toward the TFT framebuffer if one is present.
 if [ -z "${SDL_VIDEODRIVER:-}" ]; then
   export SDL_VIDEODRIVER=fbcon
+
   log "SDL_VIDEODRIVER defaulted to fbcon"
 else
   log "SDL_VIDEODRIVER pre-set to ${SDL_VIDEODRIVER}"
+
 fi
 if [ -z "${SDL_FBDEV:-}" ]; then
   if [ -e /dev/fb1 ]; then
@@ -37,6 +39,7 @@ if [ -z "${SDL_FBDEV:-}" ]; then
   elif [ -e /dev/fb0 ]; then
     export SDL_FBDEV=/dev/fb0
   fi
+
   if [ -n "${SDL_FBDEV:-}" ]; then
     log "SDL_FBDEV defaulted to ${SDL_FBDEV}"
   else
@@ -47,4 +50,5 @@ else
 fi
 
 log "Launching camera viewer (${PYTHON_BIN} -m src.camera_viewer $*)"
+
 exec "${PYTHON_BIN}" -m src.camera_viewer "$@"
