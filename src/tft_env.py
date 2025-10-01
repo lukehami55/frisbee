@@ -1,6 +1,7 @@
 """Helpers for configuring pygame/SDL to talk to TFT framebuffers."""
 
 import os
+import sys
 from typing import Iterable
 
 
@@ -28,11 +29,20 @@ def configure_sdl_env() -> None:
     a usable framebuffer device.
     """
 
+    chosen_fb = None
     for fb in _existing_paths(("/dev/fb1", "/dev/fb0")):
         _apply_fb_settings(fb)
+        chosen_fb = fb
         break
+
+    if chosen_fb:
+        print(f"[tft_env] SDL steering to framebuffer {chosen_fb}", file=sys.stderr)
+    else:
+        print("[tft_env] No framebuffer override detected; using SDL defaults", file=sys.stderr)
 
     # Some drivers (kmsdrm) insist on XDG_RUNTIME_DIR even when they do not
     # end up being used.  If the service is running without a login session we
     # provide a safe default so SDL does not crash during initialization.
-    os.environ.setdefault("XDG_RUNTIME_DIR", "/tmp")
+    if "XDG_RUNTIME_DIR" not in os.environ:
+        os.environ["XDG_RUNTIME_DIR"] = "/tmp"
+        print("[tft_env] XDG_RUNTIME_DIR defaulted to /tmp", file=sys.stderr)
