@@ -1,15 +1,21 @@
 [Unit]
 Description=USB Endoscope → TFT viewer (simple)
-After=multi-user.target
+After=network-online.target dev-fb1.device
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=__USER__
+# __WORKDIR__ will be replaced by install.sh with the absolute path to your repo.
 WorkingDirectory=__WORKDIR__
-Environment=PYTHONUNBUFFERED=1
 ExecStart=__WORKDIR__/scripts/run_service.sh --rotate 90
-Restart=always
-RestartSec=1
+Restart=on-failure
+RestartSec=2
+# Make sure we have a sane environment when running headless under systemd
+Environment=PYTHONUNBUFFERED=1
+Environment=SDL_AUDIODRIVER=dummy
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+User=pi
+Group=pi
 
 [Install]
 WantedBy=multi-user.target
