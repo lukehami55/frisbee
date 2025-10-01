@@ -1,0 +1,15 @@
+[Unit]
+Description=USB Endoscope → TFT viewer (simple)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__WORKDIR__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__WORKDIR__/.venv/bin/python -m src.camera_viewer --rotate 90
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
