@@ -1,54 +1,47 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# --- Resolve repo root (works regardless of how we're called) ---
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
-log() {
-  echo "[run_service] $*" >&2
-}
+# --- Defaults & args ---
+ROTATE="0"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --rotate) ROTATE="${2:-0}"; shift 2 ;;
+    *) echo "Unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
 
-VENV_PY="${ROOT_DIR}/.venv/bin/python"
-if [ -x "${VENV_PY}" ]; then
-  PYTHON_BIN="${VENV_PY}"
-  log "Using project virtualenv at ${PYTHON_BIN}"
-else
-  PYTHON_BIN="$(command -v python3 || true)"
-  if [ -n "${PYTHON_BIN}" ]; then
-    log "Virtualenv missing; falling back to ${PYTHON_BIN}"
-  else
-    log "ERROR: Could not find a python3 interpreter"
-    exit 1
-  fi
-fi
-
+# --- Ensure non-interactive headless-friendly env ---
 export PYTHONUNBUFFERED=1
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+export SDL_AUDIODRIVER=dummy
+# Avoid SDL complaining under systemd
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
 
-# Hint SDL toward the TFT framebuffer if one is present.
-if [ -z "${SDL_VIDEODRIVER:-}" ]; then
+# --- Prefer repo venv if present, else system python3 ---
+PY_BIN="${ROOT_DIR}/.venv/bin/python"
+if [[ ! -x "${PY_BIN}" ]]; then
+  PY_BIN="$(command -v python3)"
+fi
+
+# --- Try to steer SDL to TFT if a framebuffer exists ---
+if [[ -e /dev/fb1 ]]; then
   export SDL_VIDEODRIVER=fbcon
-
-  log "SDL_VIDEODRIVER defaulted to fbcon"
-else
-  log "SDL_VIDEODRIVER pre-set to ${SDL_VIDEODRIVER}"
-
-fi
-if [ -z "${SDL_FBDEV:-}" ]; then
-  if [ -e /dev/fb1 ]; then
-    export SDL_FBDEV=/dev/fb1
-  elif [ -e /dev/fb0 ]; then
-    export SDL_FBDEV=/dev/fb0
+  export SDL_FBDEV=/dev/fb1
+elif [[ -e /dev/fb0 ]]; then
+  # If fb0 is the small TFT (width <= 800), still use it
+  FB0_INFO="$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null || echo "")"
+  # FB0_INFO like "480,320"
+  if [[ "${FB0_INFO}" =~ ^([0-9]+),([0-9]+)$ ]]; then
+    WIDTH="${BASH_REMATCH[1]}"
+    if [[ "${WIDTH}" -le 800 ]]; then
+      export SDL_VIDEODRIVER=fbcon
+      export SDL_FBDEV=/dev/fb0
+    fi
   fi
-
-  if [ -n "${SDL_FBDEV:-}" ]; then
-    log "SDL_FBDEV defaulted to ${SDL_FBDEV}"
-  else
-    log "No framebuffer override detected"
-  fi
-else
-  log "SDL_FBDEV pre-set to ${SDL_FBDEV}"
 fi
 
-log "Launching camera viewer (${PYTHON_BIN} -m src.camera_viewer $*)"
-
-exec "${PYTHON_BIN}" -m src.camera_viewer "$@"
+# --- Launch the viewer ---
+exec "${PY_BIN}" -m src.camera_viewer --rotate "${ROTATE}" --debug
